@@ -166,7 +166,7 @@ echo "export JABBA_HOME=\"$JABBA_HOME_TO_EXPORT\""
 echo ""
 echo "jabba() {"
 echo "    local fd3=\$(mktemp /tmp/jabba-fd3.XXXXXX)"
-echo "    (JABBA_SHELL_INTEGRATION=ON $JABBA_HOME_TO_EXPORT/bin/jabba \"\$@\" 3>| \${fd3})"
+echo "    (JABBA_SHELL_INTEGRATION=ON \"$JABBA_HOME_TO_EXPORT/bin/jabba\" \"\$@\" 3>| \${fd3})"
 echo "    local exit_code=\$?"
 echo "    eval \$(cat \${fd3})"
 echo "    rm -f \${fd3}"
@@ -176,6 +176,38 @@ echo ""
 echo "if [ ! -z \"\$(jabba alias default)\" ]; then"
 echo "    jabba use default"
 echo "fi"
+cat <<'JABBA_COMPLETION'
+
+# jabba shell completion (managed by jabba init)
+if [ -n "${BASH_VERSION:-}" ]; then
+    case $- in
+        *i*)
+            if ! declare -F _get_comp_words_by_ref >/dev/null; then
+                for _jabba_completion_file in /usr/share/bash-completion/bash_completion "${HOMEBREW_PREFIX:-/opt/homebrew}/etc/profile.d/bash_completion.sh" /usr/local/etc/profile.d/bash_completion.sh /usr/local/etc/bash_completion; do
+                    if [ -r "$_jabba_completion_file" ]; then
+                        . "$_jabba_completion_file"
+                        break
+                    fi
+                done
+                unset _jabba_completion_file
+            fi
+            if declare -F _get_comp_words_by_ref >/dev/null; then
+                eval "$(jabba completion bash)"
+            fi
+            ;;
+    esac
+elif [ -n "${ZSH_VERSION:-}" ]; then
+    if [[ -o interactive ]]; then
+        if ! (( $+functions[compdef] )); then
+            autoload -Uz compinit
+            compinit
+        fi
+        if (( $+functions[compdef] )); then
+            eval "$(jabba completion zsh)"
+        fi
+    fi
+fi
+JABBA_COMPLETION
 } > "${JABBA_HOME}/jabba.sh"    
 
 SOURCE_JABBA="[ -s \"$JABBA_SHARE/jabba.sh\" ] && source \"$JABBA_SHARE/jabba.sh\""

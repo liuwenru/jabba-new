@@ -10,7 +10,7 @@ import (
 
 func TestGenerateBashIntegration(t *testing.T) {
 	content := generateBashIntegration("/home/user/.jabba")
-	
+
 	if !strings.Contains(content, "JABBA_HOME") {
 		t.Error("Bash integration should contain JABBA_HOME")
 	}
@@ -22,9 +22,43 @@ func TestGenerateBashIntegration(t *testing.T) {
 	}
 }
 
+func TestEnsureCompletionIntegration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "jabba.sh")
+	original := "# custom integration without a trailing newline"
+	if err := os.WriteFile(path, []byte(original), 0644); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := ensureCompletionIntegration(path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != original+bashCompletionIntegration {
+		t.Fatal("existing integration must be preserved and completion appended exactly once")
+	}
+}
+
+func TestCompletionIntegrationLoadersMatch(t *testing.T) {
+	installer, err := os.ReadFile("../install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(installer), bashCompletionIntegration) {
+		t.Fatal("install.sh and jabba init must load completion identically")
+	}
+	content := generateBashIntegration("/home/user/jabba home")
+	if !strings.HasSuffix(content, bashCompletionIntegration) {
+		t.Fatal("new integrations must include completion")
+	}
+}
+
 func TestGeneratePowerShellIntegration(t *testing.T) {
 	content := generatePowerShellIntegration("C:\\Users\\test\\.jabba")
-	
+
 	if !strings.Contains(content, "$env:JABBA_HOME") {
 		t.Error("PowerShell integration should contain JABBA_HOME")
 	}
@@ -35,7 +69,7 @@ func TestGeneratePowerShellIntegration(t *testing.T) {
 
 func TestGenerateFishIntegration(t *testing.T) {
 	content := generateFishIntegration("/home/user/.jabba")
-	
+
 	if !strings.Contains(content, "JABBA_HOME") {
 		t.Error("Fish integration should contain JABBA_HOME")
 	}
@@ -46,7 +80,7 @@ func TestGenerateFishIntegration(t *testing.T) {
 
 func TestGenerateNushellIntegration(t *testing.T) {
 	content := generateNushellIntegration("/home/user/.jabba")
-	
+
 	if !strings.Contains(content, "JABBA_HOME") {
 		t.Error("Nushell integration should contain JABBA_HOME")
 	}
@@ -66,7 +100,7 @@ func TestCreateIntegrationFile(t *testing.T) {
 	defer os.Setenv("JABBA_HOME", originalHome)
 
 	integrationFile := filepath.Join(tmpDir, "jabba.sh")
-	
+
 	err := createIntegrationFile("bash", integrationFile)
 	if err != nil {
 		t.Fatalf("createIntegrationFile() error = %v", err)
@@ -164,11 +198,11 @@ func TestInit(t *testing.T) {
 	originalHome := os.Getenv("JABBA_HOME")
 	originalShell := os.Getenv("SHELL")
 	homeDir := os.Getenv("HOME")
-	
+
 	os.Setenv("JABBA_HOME", tmpDir)
 	os.Setenv("SHELL", "/bin/bash")
 	os.Setenv("HOME", tmpDir)
-	
+
 	defer func() {
 		os.Setenv("JABBA_HOME", originalHome)
 		os.Setenv("SHELL", originalShell)
@@ -207,11 +241,11 @@ func TestInitIdempotent(t *testing.T) {
 	originalHome := os.Getenv("JABBA_HOME")
 	originalShell := os.Getenv("SHELL")
 	homeDir := os.Getenv("HOME")
-	
+
 	os.Setenv("JABBA_HOME", tmpDir)
 	os.Setenv("SHELL", "/bin/bash")
 	os.Setenv("HOME", tmpDir)
-	
+
 	defer func() {
 		os.Setenv("JABBA_HOME", originalHome)
 		os.Setenv("SHELL", originalShell)
@@ -234,10 +268,10 @@ func TestInitIdempotent(t *testing.T) {
 
 	// Check RC file not duplicated
 	contentAfterSecond, _ := os.ReadFile(rcFile)
-	
+
 	firstCount := strings.Count(string(contentAfterFirst), "jabba.sh")
 	secondCount := strings.Count(string(contentAfterSecond), "jabba.sh")
-	
+
 	if firstCount != secondCount {
 		t.Error("Init() should be idempotent - should not add duplicate source lines")
 	}

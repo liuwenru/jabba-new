@@ -24,6 +24,12 @@ func Init() error {
 		fmt.Printf("✓ Integration file already exists: %s\n", integrationFile)
 	}
 
+	if shell == "bash" || shell == "zsh" {
+		if err := ensureCompletionIntegration(integrationFile); err != nil {
+			return fmt.Errorf("failed to configure completion: %w", err)
+		}
+	}
+
 	// Update RC file if needed
 	if rcFile != "" {
 		if !checkRCFileHasSource(rcFile, integrationFile) {
@@ -96,7 +102,7 @@ jabba() {
             ;;
         *)
             # Unix/Linux/macOS: use fd redirection (standard approach)
-            (JABBA_SHELL_INTEGRATION=ON $JABBA_HOME/bin/jabba "$@" 3>| ${fd3})
+            (JABBA_SHELL_INTEGRATION=ON "$JABBA_HOME/bin/jabba" "$@" 3>| ${fd3})
             local exit_code=$?
             eval $(cat ${fd3})
             ;;
@@ -109,7 +115,61 @@ jabba() {
 if [ ! -z "$(jabba alias default)" ]; then
     jabba use default
 fi
-`, jabbaHome)
+`, jabbaHome) + bashCompletionIntegration
+}
+
+const bashCompletionIntegration = `
+# jabba shell completion (managed by jabba init)
+if [ -n "${BASH_VERSION:-}" ]; then
+    case $- in
+        *i*)
+            if ! declare -F _get_comp_words_by_ref >/dev/null; then
+                for _jabba_completion_file in /usr/share/bash-completion/bash_completion "${HOMEBREW_PREFIX:-/opt/homebrew}/etc/profile.d/bash_completion.sh" /usr/local/etc/profile.d/bash_completion.sh /usr/local/etc/bash_completion; do
+                    if [ -r "$_jabba_completion_file" ]; then
+                        . "$_jabba_completion_file"
+                        break
+                    fi
+                done
+                unset _jabba_completion_file
+            fi
+            if declare -F _get_comp_words_by_ref >/dev/null; then
+                eval "$(jabba completion bash)"
+            fi
+            ;;
+    esac
+elif [ -n "${ZSH_VERSION:-}" ]; then
+    if [[ -o interactive ]]; then
+        if ! (( $+functions[compdef] )); then
+            autoload -Uz compinit
+            compinit
+        fi
+        if (( $+functions[compdef] )); then
+            eval "$(jabba completion zsh)"
+        fi
+    fi
+fi
+`
+
+// Preserve existing shell customizations; old installations only need the
+// completion block appended once, not their integration script replaced.
+func ensureCompletionIntegration(path string) error {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	if strings.Contains(string(content), "# jabba shell completion (managed by jabba init)") {
+		return nil
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		return err
+	}
+	_, writeErr := f.WriteString(bashCompletionIntegration)
+	closeErr := f.Close()
+	if writeErr != nil {
+		return writeErr
+	}
+	return closeErr
 }
 
 func generatePowerShellIntegration(jabbaHome string) string {

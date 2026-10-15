@@ -198,6 +198,38 @@ jabba alias default 1.8
 
 For more information see `jabba --help`.  
 
+## Bash / Zsh completion
+
+Shell integration installed by `install.sh` or `jabba init` automatically enables
+completion in interactive Bash and Zsh sessions. After upgrading an existing
+installation, run `jabba init`, then restart your shell. Existing integration
+scripts are preserved; the completion loader is appended only once.
+
+Completion includes commands, flags, installed JDK versions, aliases, and directory
+arguments. For example, try `jabba use <Tab>`, `jabba unalias <Tab>`, or
+`jabba ls --latest=<Tab>`. Completion does not query the remote JDK index.
+
+Bash requires the `bash-completion` package (v1 or v2). The loader reuses an
+already initialized package or loads it from common Linux / Homebrew locations.
+For a custom installation, source that package before `jabba.sh`. If the package
+is unavailable, Bash completion is skipped; normal jabba commands still work.
+Zsh uses its native completion system and initializes `compinit` only if needed.
+
+To load completion manually instead of using shell integration:
+
+```bash
+# Bash (~/.bashrc)
+# Load bash-completion first if it is not already initialized.
+source <(jabba completion bash)
+```
+
+```zsh
+# Zsh (~/.zshrc), after your framework's completion setup, if any
+autoload -Uz compinit
+compinit
+source <(jabba completion zsh)
+```
+
 ## Development
 
 > PREREQUISITE: [go1.8](https://github.com/moovweb/gvm)

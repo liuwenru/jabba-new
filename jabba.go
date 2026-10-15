@@ -15,8 +15,8 @@ import (
 
 	"github.com/Jabba-Team/jabba/command"
 	"github.com/Jabba-Team/jabba/semver"
-	log "github.com/sirupsen/logrus"
 	rootcerts "github.com/hashicorp/go-rootcerts"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -383,12 +383,113 @@ func main() {
 		},
 		whichCmd,
 	)
+	configureCompletion(rootCmd)
 	rootCmd.Flags().Bool("version", false, "version of jabba")
 	rootCmd.PersistentFlags().String("fd3", "", "")
 	rootCmd.PersistentFlags().MarkHidden("fd3")
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(-1)
 	}
+}
+
+func configureCompletion(root *cobra.Command) {
+	for _, cmd := range root.Commands() {
+		// Version selectors are not file names. Opt in to directory completion
+		// only for arguments which really accept paths.
+		cmd.ValidArgsFunction = cobra.NoFileCompletions
+		switch cmd.Name() {
+		case "use", "which":
+			cmd.ValidArgsFunction = completeInstalled(true, "")
+		case "uninstall":
+			cmd.ValidArgsFunction = completeInstalled(false, "uninstall")
+		case "unlink":
+			cmd.ValidArgsFunction = completeInstalled(false, "system")
+		case "alias":
+			cmd.ValidArgsFunction = func(cmd *cobra.Command, args []string, prefix string) ([]string, cobra.ShellCompDirective) {
+				if len(args) == 0 {
+					return completeAliases(prefix, true), cobra.ShellCompDirectiveNoFileComp
+				}
+				return completeInstalled(false, "")(cmd, args[1:], prefix)
+			}
+		case "unalias":
+			cmd.ValidArgsFunction = func(cmd *cobra.Command, args []string, prefix string) ([]string, cobra.ShellCompDirective) {
+				if len(args) != 0 {
+					return nil, cobra.ShellCompDirectiveNoFileComp
+				}
+				return completeAliases(prefix, false), cobra.ShellCompDirectiveNoFileComp
+			}
+		case "link":
+			cmd.ValidArgsFunction = func(cmd *cobra.Command, args []string, prefix string) ([]string, cobra.ShellCompDirective) {
+				if len(args) == 1 {
+					return nil, cobra.ShellCompDirectiveFilterDirs
+				}
+				return completeInstalled(false, "system")(cmd, args, prefix)
+			}
+		}
+		if cmd.Flags().Lookup("output") != nil {
+			cmd.MarkFlagDirname("output")
+		}
+		if cmd.Flags().Lookup("latest") != nil {
+			cmd.RegisterFlagCompletionFunc("latest", cobra.FixedCompletions([]string{"major", "minor", "patch"}, cobra.ShellCompDirectiveNoFileComp))
+		}
+		if cmd.Flags().Lookup("os") != nil {
+			cmd.RegisterFlagCompletionFunc("os", cobra.FixedCompletions([]string{"darwin", "linux", "windows"}, cobra.ShellCompDirectiveNoFileComp))
+		}
+		if cmd.Flags().Lookup("arch") != nil {
+			cmd.RegisterFlagCompletionFunc("arch", cobra.FixedCompletions([]string{"amd64", "386", "arm", "arm64"}, cobra.ShellCompDirectiveNoFileComp))
+		}
+	}
+}
+
+func completeInstalled(aliases bool, mode string) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	return func(cmd *cobra.Command, args []string, prefix string) ([]string, cobra.ShellCompDirective) {
+		if len(args) != 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		versions, err := command.Ls()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		var candidates []string
+		seen := make(map[string]bool)
+		for _, version := range versions {
+			name := version.String()
+			system := strings.HasPrefix(name, "system@")
+			if (mode == "system" && !system) || (mode == "uninstall" && system) {
+				continue
+			}
+			if strings.HasPrefix(name, prefix) && !seen[name] {
+				candidates = append(candidates, name)
+				seen[name] = true
+			}
+		}
+		if aliases {
+			for _, name := range completeAliases(prefix, false) {
+				if !seen[name] {
+					candidates = append(candidates, name)
+				}
+			}
+		}
+		return candidates, cobra.ShellCompDirectiveNoFileComp
+	}
+}
+
+func completeAliases(prefix string, includeDefault bool) []string {
+	aliases, _ := command.LsAlias()
+	if aliases == nil {
+		aliases = make(map[string]string)
+	}
+	if includeDefault {
+		aliases["default"] = ""
+	}
+	var names []string
+	for name := range aliases {
+		if strings.HasPrefix(name, prefix) {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 func parseTrimTo(value string) semver.VersionPart {
