@@ -31,10 +31,13 @@ func completionTestCommand() *cobra.Command {
 func TestArgumentCompletion(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("JABBA_HOME", home)
-	for _, name := range []string{"temurin@17.0.1", "zulu@21.0.1", "system@11.0.1"} {
+	for _, name := range []string{"temurin@17.0.1", "zulu@21.0.1"} {
 		if err := os.MkdirAll(filepath.Join(home, "jdk", name), 0755); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if err := os.Symlink(t.TempDir(), filepath.Join(home, "jdk", "system@11.0.1")); err != nil {
+		t.Fatal(err)
 	}
 	for _, name := range []string{"default", "work"} {
 		if err := os.WriteFile(filepath.Join(home, name+".alias"), []byte("temurin@17.0.1"), 0644); err != nil {

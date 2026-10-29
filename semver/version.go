@@ -3,8 +3,23 @@ package semver
 import (
 	"fmt"
 	"github.com/Masterminds/semver"
+	"regexp"
 	"strings"
 )
+
+// <vendor>-<version> (e.g. openjdk-11.0.2) is treated the same as <vendor>@<version>
+var vendorDashRegexp = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9_.]*)-(\d.*)$`)
+
+// splitQualifier splits <qualifier>@<version> or <vendor>-<version> into qualifier and version
+func splitQualifier(raw string) (string, string) {
+	if i := strings.Index(raw, "@"); i != -1 {
+		return raw[0:i], raw[i+1:]
+	}
+	if m := vendorDashRegexp.FindStringSubmatch(raw); m != nil {
+		return m[1], m[2]
+	}
+	return "", raw
+}
 
 type Version struct {
 	qualifier string
@@ -43,6 +58,10 @@ func (t *Version) TrimTo(part VersionPart) string {
 	return t.raw
 }
 
+func (t *Version) Qualifier() string {
+	return t.qualifier
+}
+
 func (t *Version) Major() int64 {
 	return t.ver.Major()
 }
@@ -62,11 +81,8 @@ func (t *Version) Prerelease() string {
 func ParseVersion(raw string) (*Version, error) {
 	p := new(Version)
 	p.raw = raw
-	// selector can be either <version> or <qualifier>@<version>
-	if strings.Contains(raw, "@") {
-		p.qualifier = raw[0:strings.Index(raw, "@")]
-		raw = raw[strings.Index(raw, "@")+1:]
-	}
+	// selector can be either <version>, <qualifier>@<version> or <vendor>-<version>
+	p.qualifier, raw = splitQualifier(raw)
 	parsed, err := semver.NewVersion(raw)
 	if err != nil {
 		return nil, fmt.Errorf("%s is not a valid version", raw)

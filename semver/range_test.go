@@ -19,6 +19,11 @@ func TestContains(t *testing.T) {
 	assertWithinRange(t, "a@1.7.x", "a@1.8.72", false)
 	assertWithinRange(t, "a@>=1.7 <=1.8.75", "a@1.8.72", true)
 	assertWithinRange(t, "a@>=1.7 <=1.8.75", "a@1.8.80", false)
+	assertWithinRange(t, "openjdk-11", "openjdk-11.0.2", true)
+	assertWithinRange(t, "openjdk-11", "openjdk@11.0.2", true)
+	assertWithinRange(t, "openjdk-11", "11.0.2", false)
+	assertWithinRange(t, "openjdk-11", "zulu-11.0.2", false)
+	assertWithinRange(t, "11.0.21-openjdk", "11.0.21-openjdk", true)
 }
 
 func TestPre070Compat(t *testing.T) {

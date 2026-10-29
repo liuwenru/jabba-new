@@ -249,8 +249,8 @@ func main() {
 				if len(args) == 0 {
 					return pflag.ErrHelp
 				}
-				if strings.HasPrefix(args[0], "system@") {
-					log.Fatal("Link to system JDK can only be removed with 'unlink'" +
+				if ver, err := command.LsBestMatch(args[0]); err == nil && command.IsLinked(ver) {
+					log.Fatal("Linked JDK can only be removed with 'unlink'" +
 						" (e.g. 'jabba unlink " + args[0] + "')")
 				}
 				err := command.Uninstall(args[0])
@@ -283,8 +283,9 @@ func main() {
 				}
 				return nil
 			},
-			Example: "  jabba link system@1.8.20 /Library/Java/JavaVirtualMachines/jdk1.8.0_20.jdk\n" +
-				"  jabba link system@1.8.20 # show link target",
+			Example: "  jabba link openjdk-11.0.2 /opt/jdk-11\n" +
+				"  jabba link system@1.8.20 /Library/Java/JavaVirtualMachines/jdk1.8.0_20.jdk\n" +
+				"  jabba link openjdk-11.0.2 # show link target",
 		},
 		&cobra.Command{
 			Use:   "unlink [name]",
@@ -298,7 +299,7 @@ func main() {
 				}
 				return nil
 			},
-			Example: "  jabba unlink system@1.8.20",
+			Example: "  jabba unlink openjdk-11.0.2",
 		},
 		&cobra.Command{
 			Use:   "use [version to use]",
@@ -454,7 +455,7 @@ func completeInstalled(aliases bool, mode string) func(*cobra.Command, []string,
 		seen := make(map[string]bool)
 		for _, version := range versions {
 			name := version.String()
-			system := strings.HasPrefix(name, "system@")
+			system := command.IsLinked(name)
 			if (mode == "system" && !system) || (mode == "uninstall" && system) {
 				continue
 			}

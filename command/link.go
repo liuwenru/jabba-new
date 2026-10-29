@@ -1,7 +1,7 @@
 package command
 
 import (
-	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,17 +13,17 @@ import (
 )
 
 func Link(selector string, dir string) error {
-	if !strings.HasPrefix(selector, "system@") {
-		return errors.New("Name must begin with 'system@' (e.g. 'system@1.8.73')")
-	}
-	// <version> has to be valid per semver
-	if _, err := semver.ParseVersion(selector); err != nil {
-		return err
+	// name has to be <vendor>-<version> or <vendor>@<version>, <version> has to be valid per semver
+	if v, err := semver.ParseVersion(selector); err != nil || v.Qualifier() == "" {
+		return fmt.Errorf("Name must be <vendor>-<version> (e.g. 'openjdk-11.0.2'), got '%s'", selector)
 	}
 	if dir == "" {
 		ver, err := LsBestMatch(selector)
 		if err != nil {
 			return err
+		}
+		if !IsLinked(ver) {
+			return fmt.Errorf("'%s' is not a link (use 'jabba uninstall %s' instead)", ver, ver)
 		}
 		return os.Remove(filepath.Join(cfg.Dir(), "jdk", ver))
 	} else {
@@ -33,8 +33,26 @@ func Link(selector string, dir string) error {
 		if err := os.MkdirAll(filepath.Join(cfg.Dir(), "jdk"), 0755); err != nil {
 			return err
 		}
-		return os.Symlink(dir, filepath.Join(cfg.Dir(), "jdk", selector))
+		target := filepath.Join(cfg.Dir(), "jdk", selector)
+		if _, err := os.Lstat(target); err == nil {
+			return fmt.Errorf("'%s' already exists", selector)
+		}
+		return os.Symlink(dir, target)
 	}
+}
+
+// IsLinked reports whether jdk/<name> is a symlink to a JDK outside of $JABBA_HOME/jdk (i.e. created by `jabba link`)
+func IsLinked(name string) bool {
+	jdkDir := filepath.Join(cfg.Dir(), "jdk")
+	target, err := os.Readlink(filepath.Join(jdkDir, name))
+	if err != nil {
+		return false
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(jdkDir, target)
+	}
+	rel, err := filepath.Rel(jdkDir, filepath.Clean(target))
+	return err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func LinkLatest() error {
@@ -47,7 +65,7 @@ func LinkLatest() error {
 	for _, f := range files {
 		if f.IsDir() || f.Mode()&os.ModeSymlink == os.ModeSymlink {
 			sourceVersion := f.Name()
-			if strings.Count(sourceVersion, ".") == 1 && !strings.HasPrefix(sourceVersion, "system@") {
+			if strings.Count(sourceVersion, ".") == 1 && !IsLinked(sourceVersion) {
 				target := GetLink(sourceVersion)
 				_, err := LsBestMatchWithVersionSlice(vs, sourceVersion)
 				if err != nil {
@@ -67,7 +85,7 @@ func LinkLatest() error {
 	for _, v := range semver.VersionSlice(vs).TrimTo(semver.VPMinor) {
 		sourceVersion := v.TrimTo(semver.VPMinor)
 		target := filepath.Join(cfg.Dir(), "jdk", v.String())
-		if v.Prerelease() == "" && cache[sourceVersion] != target && !strings.HasPrefix(sourceVersion, "system@") {
+		if v.Prerelease() == "" && cache[sourceVersion] != target && !IsLinked(v.String()) {
 			source := filepath.Join(cfg.Dir(), "jdk", sourceVersion)
 			log.Info(sourceVersion + " -> " + target)
 			os.Remove(source)

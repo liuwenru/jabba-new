@@ -52,14 +52,11 @@ func (t *Range) String() string {
 func ParseRange(raw string) (*Range, error) {
 	p := new(Range)
 	p.raw = raw
-	// selector can be either <version> or <qualifier>@<version>
-	if strings.Contains(raw, "@") {
-		p.qualifier = raw[0:strings.Index(raw, "@")]
-		raw = raw[strings.Index(raw, "@")+1:]
-		if raw == "" {
-			// `jabba ls-remote zulu@` convenience
-			raw = ">=0.0.0-0"
-		}
+	// selector can be either <version>, <qualifier>@<version> or <vendor>-<version>
+	p.qualifier, raw = splitQualifier(raw)
+	if raw == "" && strings.Contains(p.raw, "@") {
+		// `jabba ls-remote zulu@` convenience
+		raw = ">=0.0.0-0"
 	}
 	constraint := pre070Compat(raw)
 	parsed, err := semver.NewConstraint(constraint)
